@@ -21,11 +21,13 @@ class COLORS:
     HANDLE_ACTIVE = (0, 200, 0)
     REFERENCE = (50, 50, 200)
 
+    TUNER = ((100, 100, 100), (120, 120, 120))
+
 
 class SYSTEM:
 
     MASS = 0.5
-    DAMPING = 2
+    DAMPING = 0.5
     MAX_TORQUE = 1
     G = 9.81
 
@@ -34,6 +36,6 @@ class SYSTEM:
     RAIL_LENGTH = 3
     ANGLE_LIMIT_DEG = 45
 
-    KP = 6
-    KI = 10
-    KD = 4
+    KP = 0
+    KI = 0
+    KD = 0

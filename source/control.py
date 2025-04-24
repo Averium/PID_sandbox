@@ -78,6 +78,11 @@ class PID:
         self.zoh = 0
         self.last_error = 0
 
+    def tune(self, kp, ki, kd):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+
     def control(self, reference, measurement, dt):
         error = reference - measurement
 
