@@ -1,15 +1,16 @@
+import pygame
+
 
 class SETTINGS:
 
     FPS = 120
+    DISPLAY_FLAGS = pygame.FULLSCREEN | pygame.HWACCEL
 
-    WINDOW_WIDTH = 1024
-    WINDOW_HEIGHT = 768
+    WINDOW_WIDTH = 1920
+    WINDOW_HEIGHT = 1080
 
-    SCALE = 200  # pixels / meter
-
-    HANDLE_SIZE = 8
-    HANDLE_HIGHLIGHT = 2
+    SCALE = 300  # pixels / meter
+    HANDLE_HIGHLIGHT = 3
 
 
 class COLORS:
@@ -19,9 +20,10 @@ class COLORS:
     RAIL = (60, 60, 60)
     HANDLE_INACTIVE = (0, 150, 0)
     HANDLE_ACTIVE = (0, 200, 0)
-    REFERENCE = (50, 50, 200)
+    REFERENCE = (60, 60, 60)
 
-    TUNER = ((100, 100, 100), (120, 120, 120))
+    TUNER = (((100, 100, 100), (120, 120, 120)), ((150, 0, 0), (200, 50, 50)))
+    SETTING = (((100, 100, 100), (120, 120, 120)), ((0, 0, 150), (50, 50, 200)))
 
 
 class SYSTEM:
@@ -34,7 +36,9 @@ class SYSTEM:
     MASS_WIDTH = 0.4
     MASS_HEIGHT = 0.2
     RAIL_LENGTH = 3
-    ANGLE_LIMIT_DEG = 45
+    RAIL_WIDTH = 0.02
+
+    HANDLE_SIZE = 0.05
 
     KP = 0
     KI = 0

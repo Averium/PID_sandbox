@@ -1,16 +1,14 @@
+from collections import deque
+
 import pygame
-from openai import project
 
 from source.settings import COLORS, SETTINGS, SYSTEM
-from math import pi
-
-Vector = pygame.math.Vector2
+from source.system import System
 
 
 class Reference:
 
-    MARKER_SIZE = 20
-    MARKER_DISTANCE = SYSTEM.MASS_HEIGHT / 2 * 1.5
+    MARKER_SIZE = 0.1 * SETTINGS.SCALE
 
     def __init__(self, system):
         self.system = system
@@ -29,15 +27,15 @@ class Reference:
         ex = self.system.ray
         ey = ex.rotate(90)
 
-        center = self.system.center + ex * self.pos * SETTINGS.SCALE + ey * Reference.MARKER_DISTANCE * SETTINGS.SCALE
-        handle = center + ey * (Reference.MARKER_SIZE * 2 + Reference.MARKER_DISTANCE)
+        center = self.system.center + ex * self.pos * SETTINGS.SCALE + ey * System.HANDLE_SIZE * 4
+        handle = center + ey * (Reference.MARKER_SIZE * 2 + System.HANDLE_SIZE)
 
         return ex, ey, center, handle
 
     def events(self, mouse_pos, mouse_pressed):
         ex, ey, center, handle = self.locate()
 
-        self.hovered = (mouse_pos - handle).length() < SETTINGS.HANDLE_SIZE * 2
+        self.hovered = (mouse_pos - handle).length() < System.HANDLE_SIZE * 2
 
         if mouse_pressed[0] and self.hovered:
             self.held = True
@@ -59,10 +57,10 @@ class Reference:
 
         if self.hovered or self.held:
             color = COLORS.HANDLE_ACTIVE
-            radius = SETTINGS.HANDLE_SIZE + SETTINGS.HANDLE_HIGHLIGHT
+            radius = System.HANDLE_SIZE + SETTINGS.HANDLE_HIGHLIGHT
         else:
             color = COLORS.HANDLE_INACTIVE
-            radius = SETTINGS.HANDLE_SIZE
+            radius = System.HANDLE_SIZE
 
         pygame.draw.polygon(display, COLORS.REFERENCE, arrow)
         pygame.draw.circle(display, color, handle, radius)
@@ -88,6 +86,9 @@ class PID:
 
         self.zoh = self.zoh + error * dt
 
+        if self.ki == 0:
+            self.zoh = 0
+
         control_p = error * self.kp
         control_i = self.zoh * self.ki
         control_d = (error - self.last_error) / dt * self.kd
@@ -95,3 +96,29 @@ class PID:
         self.last_error = error
 
         return control_p + control_i + control_d
+
+
+class Delay:
+
+    def __init__(self, delay):
+        self.queue = deque()
+        self.delay = delay
+        self.timestamp = 0
+        self._value = 0
+
+    def add(self, value):
+        self.queue.append((value, self.timestamp))
+
+    def update(self, time):
+        self.timestamp = time
+
+        while self.queue:
+            next_value, next_time = self.queue[0]
+            if self.timestamp - next_time >= self.delay:
+                self._value, _ = self.queue.popleft()
+            else:
+                break
+
+    @property
+    def value(self):
+        return self._value
