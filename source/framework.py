@@ -3,10 +3,10 @@ from typing import Optional
 import pygame
 from pygame.math import Vector2 as Vector
 
-from source.control import Reference, PID, Delay
-from source.settings import SETTINGS, COLORS, SYSTEM
+from source.control import Reference, PID, Delay, Actuator, Sensor
+from source.settings import SETTINGS, COLORS, SYSTEM, LAYOUT
 from source.system import System
-from source.widgets import Tuner, WidgetContainer
+from source.widgets import Tuner, WidgetContainer, Widget, TextWidget, Plotter
 
 
 class Framework:
@@ -14,7 +14,7 @@ class Framework:
     MS_TO_S = 0.001
 
     def __init__(self):
-        self.display = pygame.display.set_mode((SETTINGS.WINDOW_WIDTH, SETTINGS.WINDOW_HEIGHT), SETTINGS.DISPLAY_FLAGS)
+        self.display = pygame.display.set_mode((LAYOUT.WINDOW_WIDTH, LAYOUT.WINDOW_HEIGHT), SETTINGS.DISPLAY_FLAGS)
         self.clock = pygame.time.Clock()
 
         self.dt = 0
@@ -27,22 +27,41 @@ class Framework:
         self.system: Optional[System] = None
         self.reference: Optional[Reference] = None
         self.controller: Optional[PID] = None
-        self.delay: Optional[Delay] = None
+        self.actuator: Optional[Actuator] = None
+        self.sensor: Optional[Sensor] = None
 
         self.widgets = WidgetContainer()
 
-        self.kp_tuner = Tuner(self.widgets, (20, 20), "KP", COLORS.TUNER, 0, limits=[0, 100])
-        self.ki_tuner = Tuner(self.widgets, (20, 50), "KI", COLORS.TUNER, 0, limits=[0, 100])
-        self.kd_tuner = Tuner(self.widgets, (20, 80), "KD", COLORS.TUNER, 0, limits=[0, 100])
-        self.delay_tuner = Tuner(self.widgets, (20, 110), "delay", COLORS.TUNER, 0, limits=[0, 1000], step=10)
+
+        Widget(self.widgets, LAYOUT.LEFT_FIELD, COLORS.FIELD)
+        Widget(self.widgets, LAYOUT.RIGHT_FIELD, COLORS.FIELD)
+        Widget(self.widgets, LAYOUT.BOTTOM_FIELD, COLORS.FIELD)
+
+        TextWidget(self.widgets, LAYOUT.CONTROLLER_TEXT, "Controller", COLORS.LABEL, align="topleft")
+        self.kp_tuner = Tuner(self.widgets, LAYOUT.KP_TUNER, "P gain", COLORS.TUNER, 0, limits=[0, 100], align="bottomleft")
+        self.ki_tuner = Tuner(self.widgets, LAYOUT.KI_TUNER, "I gain", COLORS.TUNER, 0, limits=[0, 100], align="bottomleft")
+        self.kd_tuner = Tuner(self.widgets, LAYOUT.KD_TUNER, "D gain", COLORS.TUNER, 0, limits=[0, 100], align="bottomleft")
+
+        TextWidget(self.widgets, LAYOUT.ACTUATOR_TEXT, "Actuator", COLORS.LABEL, align="topleft")
+        self.act_delay_tuner = Tuner(self.widgets, LAYOUT.ACT_DELAY, "delay [ms]", COLORS.SETTING, 0, limits=[0, 100], step=10, align="bottomleft")
+        self.act_lim_tuner = Tuner(self.widgets, LAYOUT.ACT_LIMIT,   "limit [N] ", COLORS.SETTING, 0, limits=[0, 100], step=1, align="bottomleft")
+
+        TextWidget(self.widgets, LAYOUT.SENSOR_TEXT, "Sensor", COLORS.LABEL, align="topleft")
+        self.sensor_delay_tuner = Tuner(self.widgets, LAYOUT.SENSOR_DELAY, "delay [ms]", COLORS.SETTING, 0, limits=[0, 100], step=10, align="bottomleft")
+        self.sensor_amplitude_tuner = Tuner(self.widgets, LAYOUT.SENSOR_NOISE,   "Noise [mm]", COLORS.SETTING, 0, limits=[0, 100], step=1, align="bottomleft")
+
+        self.top_plotter = Plotter(self.widgets, LAYOUT.TOP_PLOT, COLORS.PLOTTER, ("Reference", "Measurement"), 5000, 0, limits=(-SYSTEM.RAIL_LENGTH/2, SYSTEM.RAIL_LENGTH/2))
+
+        self.debug = TextWidget(self.widgets, (LAYOUT.GAP * 2, LAYOUT.GAP * 2), " ", COLORS.LABEL, align="topleft")
 
         self.reset()
 
     def reset(self):
-        self.system = System(SYSTEM.MASS, SYSTEM.DAMPING, 0)
+        self.system = System(LAYOUT.SYSTEM_CENTER, SYSTEM.MASS, SYSTEM.DAMPING, 0)
         self.reference = Reference(self.system)
         self.controller = PID(SYSTEM.KP, SYSTEM.KI, SYSTEM.KD)
-        self.delay = Delay(0)
+        self.actuator = Actuator()
+        self.sensor = Sensor()
 
     def start(self):
         if not self.running:
@@ -60,9 +79,9 @@ class Framework:
             self.running = False
 
         if key_pressed[pygame.K_a] or key_pressed[pygame.K_LEFT]:
-            self.reference.move(-2, self.dt)
+            self.reference.move(-3, self.dt)
         if key_pressed[pygame.K_d] or key_pressed[pygame.K_RIGHT]:
-            self.reference.move( 2, self.dt)
+            self.reference.move( 3, self.dt)
 
         for event in event_list:
             if event.type == pygame.QUIT:
@@ -75,32 +94,49 @@ class Framework:
                 if event.key == pygame.K_s:
                     self.reference.pos = -self.reference.pos
             if event.type == pygame.MOUSEWHEEL:
-                mouse_pressed[3] = event.y
+                mouse_pressed[3] = event.y * (1 + key_pressed[pygame.K_LCTRL] * 9)
 
         self.widgets.events(mouse_pos, mouse_pressed)
-
-        self.delay.delay = self.delay_tuner.value
 
         self.system.events(mouse_pos, mouse_pressed)
         self.reference.events(mouse_pos, mouse_pressed)
 
+        self.actuator.delay = self.act_delay_tuner.value
+        self.actuator.limit = self.act_lim_tuner.value
+
+        self.sensor.delay = self.sensor_delay_tuner.value
+        self.sensor.amplitude = self.sensor_amplitude_tuner.value
+
+        self.controller.tune(self.kp_tuner.value, self.ki_tuner.value, self.kd_tuner.value)
+
     def update(self):
 
-        self.delay.update(pygame.time.get_ticks())
+        now = pygame.time.get_ticks()
+        self.actuator.update(now)
+        self.sensor.update(now)
 
         if not self.paused:
-            self.delay.add(self.controller.control(self.reference.pos, self.system.pos, self.dt))
-            self.system.apply_force(self.delay.value)
+
+            self.sensor.request(self.system.pos)
+
+            integrator_ena = not self.actuator.saturated()
+            control_signal = self.controller.control(self.reference.pos, self.sensor.value, self.dt, integrator_ena)
+
+            self.actuator.request(control_signal)
+            self.system.apply_force(self.actuator.value)
             self.system.update(self.dt)
-            self.controller.tune(self.kp_tuner.value, self.ki_tuner.value, self.kd_tuner.value)
+
+            self.top_plotter.register("Reference", self.reference.pos, now)
+            self.top_plotter.register("Measurement", self.sensor.value, now)
+            self.top_plotter.filter(now)
 
     def render(self):
         self.display.fill(COLORS.BACKGROUND)
 
+        self.widgets.render(self.display)
+
         self.reference.render(self.display)
         self.system.render(self.display)
-
-        self.widgets.render(self.display)
 
         pygame.display.flip()
 

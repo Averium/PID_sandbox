@@ -1,4 +1,5 @@
 from collections import deque
+from random import random
 
 import pygame
 
@@ -81,10 +82,10 @@ class PID:
         self.ki = ki
         self.kd = kd
 
-    def control(self, reference, measurement, dt):
+    def control(self, reference, measurement, dt, integrator_ena):
         error = reference - measurement
 
-        self.zoh = self.zoh + error * dt
+        self.zoh = self.zoh + error * dt * integrator_ena
 
         if self.ki == 0:
             self.zoh = 0
@@ -106,7 +107,7 @@ class Delay:
         self.timestamp = 0
         self._value = 0
 
-    def add(self, value):
+    def request(self, value):
         self.queue.append((value, self.timestamp))
 
     def update(self, time):
@@ -122,3 +123,27 @@ class Delay:
     @property
     def value(self):
         return self._value
+
+
+class Actuator(Delay):
+
+    def __init__(self, delay=0, limit=0):
+        super().__init__(delay)
+        self.limit = limit
+
+    @property
+    def value(self):
+        return min(max(self._value, -self.limit), self.limit) if self.limit > 0 else self._value
+
+    def saturated(self):
+        return abs(self.value) == self.limit
+
+class Sensor(Delay):
+
+    def __init__(self, delay=0, amplitude=0):
+        super().__init__(delay)
+        self.amplitude = amplitude
+
+    @property
+    def value(self):
+        return self._value + (random() * 2 - 1) * self.amplitude * 0.001

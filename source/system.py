@@ -11,8 +11,8 @@ class System:
     RAIL_WIDTH = SYSTEM.RAIL_WIDTH * SETTINGS.SCALE
     HANDLE_SIZE = SYSTEM.HANDLE_SIZE * SETTINGS.SCALE
 
-    def __init__(self, mass, damping, angle, alpha=0.1):
-        self.center = Vector(SETTINGS.WINDOW_WIDTH / 2, SETTINGS.WINDOW_HEIGHT / 2)
+    def __init__(self, center, mass, damping, angle, alpha=0.1):
+        self.center = Vector(center)
 
         self.mass = mass
         self.damping = damping
@@ -59,7 +59,7 @@ class System:
         else:
             self.held_left = False
             self.held_right = False
-        if mouse_pressed[2]:
+        if mouse_pressed[2] and (self.hovered_left or self.hovered_right):
             self.tilt(0)
 
         if self.held_left or self.held_right:
