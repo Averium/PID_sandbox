@@ -1,4 +1,4 @@
-from math import cos, sin, radians
+from math import cos, sin, radians, degrees
 
 import pygame
 from pygame.math import Vector2 as Vector
@@ -68,8 +68,7 @@ class System:
             else:
                 ray = (mouse_pos - self.center).normalize()
 
-            angle = radians(Vector(1, 0).angle_to(ray))
-            self.tilt(angle)
+            self.tilt(radians(Vector(1, 0).angle_to(ray)))
 
     def update(self, dt):
         self.update_angle()
@@ -93,7 +92,8 @@ class System:
         self._target_angle = angle
 
     def update_angle(self):
-        self._angle = self._target_angle * self._angle_filter + self._angle * (1 - self._angle_filter)
+        angle_error = (degrees(self._target_angle - self._angle) + 180) % 360 - 180
+        self._angle = self._angle + radians(angle_error) * self._angle_filter
 
         self._ray = Vector(cos(self._angle), sin(self._angle))
 

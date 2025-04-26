@@ -19,5 +19,4 @@ if __name__ == "__main__":
 
 # TODO:
 #  plot widget text and ticks
-#  switch widget
-#  anti-windup and derivative filter switches
+#  light theme

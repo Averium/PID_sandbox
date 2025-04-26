@@ -70,10 +70,10 @@ class Reference:
 class PID:
 
     def __init__(self, kp, ki, kd, nd=0, limit=0):
-        self.kp = 0
-        self.ki = 0
-        self.kd = 0
-        self.nd = 0
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.nd = nd
 
         self.i_term = 0
         self.d_term = 0
@@ -83,15 +83,7 @@ class PID:
         self.anti_windup = False
         self.limit = limit
 
-        self.tune(kp, ki, kd, nd)
-
-    def tune(self, kp, ki, kd, nd):
-        self.kp = kp
-        self.ki = ki
-        self.kd = kd
-        self.nd = 1.0 / (1.0 + nd)
-
-    def control(self, reference, measurement, dt):
+    def update(self, reference, measurement, dt):
         error = reference - measurement
 
         if abs(self.output) != self.limit or not self.anti_windup:
@@ -99,7 +91,7 @@ class PID:
         if self.ki == 0:
             self.i_term = 0
 
-        self.d_term = self.d_term + self.nd * ((error - self.last_error) / dt - self.d_term)
+        self.d_term = self.d_term + (1.0 / (1.0 + self.nd)) * ((error - self.last_error) / dt - self.d_term)
         self.last_error = error
 
         control_p = error * self.kp
@@ -110,8 +102,6 @@ class PID:
             self.output = min(max(control_p + control_i + control_d, -self.limit), self.limit)
         else:
             self.output = control_p + control_i + control_d
-
-        return self.output
 
 class Delay:
 

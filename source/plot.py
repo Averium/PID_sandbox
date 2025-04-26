@@ -54,7 +54,8 @@ class Plotter(Widget):
         self.border = self.inflate(-LAYOUT.GAP, -LAYOUT.GAP)
         self.scaling = self.border.width, self.border.left, self.border.height, self.border.bottom
 
-        self._limits = limits
+        self.limits = limits
+        self.floating = limits is None
 
         self.signals = {signal: TimeSeries(signal) for signal in signals}
 
@@ -68,24 +69,32 @@ class Plotter(Widget):
             self.signals[key].append(value, now)
 
     def update_limits(self):
-        if self._limits is None:
-            high = numpy.min(numpy.min([series.data for series in self.signals.values()]))
-            low = numpy.max(numpy.max([series.data for series in self.signals.values()]))
-            return high, low
-        else:
-            return self._limits
+        high = numpy.min(numpy.min([series.data for series in self.signals.values()]))
+        low = numpy.max(numpy.max([series.data for series in self.signals.values()]))
+        self.limits = high, low
 
     def draw_axes(self, display):
-        pygame.draw.lines(display, self.color[1], False, (self.border.topleft, self.border.bottomleft, self.border.bottomright), 1)
-        pygame.draw.polygon(display, self.color[1], tuple(point + self.border.bottomright for point in Plotter.ARROW_RIGHT))
+
+        low, high = self.limits
+
+        if low + high == 0:
+            y = self.border.centery
+        else:
+            y = self.border.bottom + (0 - low) * -self.border.height / (high - low)
+            y = min(max(y, self.border.top), self.border.bottom)
+
+        x_start, x_end = (self.border.left, y), (self.border.right, y)
+
+        pygame.draw.line(display, self.color[1], self.border.topleft, self.border.bottomleft, 1)
+        pygame.draw.line(display, self.color[1], x_start, x_end, 1)
+        pygame.draw.polygon(display, self.color[1], tuple(point + x_end for point in Plotter.ARROW_RIGHT))
         pygame.draw.polygon(display, self.color[1], tuple(point + self.border.topleft for point in Plotter.ARROW_UP))
 
     def draw_data(self, display):
-        limits = self.update_limits()
 
         for index, signal in enumerate(self.signals.values()):
             if len(signal.data) > 2:
-                points = signal.scale(*self.scaling, limits)
+                points = signal.scale(*self.scaling, self.limits)
                 pygame.draw.lines(display, self.color[3][index], False, tuple(map(tuple, points)))
 
                 label_surface = self.font.render(f"{signal.data[-1]:.3f}", True, self.color[3][index])
@@ -110,6 +119,10 @@ class Plotter(Widget):
     def render(self, display):
 
         pygame.draw.rect(display, self.color[0], self)
+
+        if self.floating:
+            self.update_limits()
+
         self.draw_axes(display)
         self.draw_data(display)
         self.draw_legend(display)

@@ -19,6 +19,7 @@ class Framework:
         self.clock = pygame.time.Clock()
 
         self.dt = 0
+        self.now = 0
 
         self.paused = False
         self.running = False
@@ -59,8 +60,8 @@ class Framework:
         self.sensor_delay_tuner = Tuner(self.widgets, LAYOUT.SENSOR_DELAY, "Delay [ms]", COLORS.SETTING, 0, **delay_setting)
         self.sensor_noise_tuner = Tuner(self.widgets, LAYOUT.SENSOR_NOISE, "Noise  [m]", COLORS.SETTING, 0, **noise_setting)
 
-        self.top_plotter = Plotter(self.widgets, LAYOUT.TOP_PLOT, COLORS.TOP_PLOTTER, ("Reference", "Measurement"), 4000, 10, limits=(-SYSTEM.RAIL_LENGTH/2, SYSTEM.RAIL_LENGTH/2))
-        self.bot_plotter = Plotter(self.widgets, LAYOUT.BOT_PLOT, COLORS.BOT_PLOTTER, ("Control", "Integrator"), 4000, 10)
+        self.top_plotter = Plotter(self.widgets, LAYOUT.TOP_PLOT, COLORS.TOP_PLOTTER, ("Reference", "Measurement"), SETTINGS.PLOT_TIME_BUFFER_S, SETTINGS.PLOT_SAMPLING_S, limits=(-SYSTEM.RAIL_LENGTH/2, SYSTEM.RAIL_LENGTH/2))
+        self.bot_plotter = Plotter(self.widgets, LAYOUT.BOT_PLOT, COLORS.BOT_PLOTTER, ("Control", "Integrator"), SETTINGS.PLOT_TIME_BUFFER_S, SETTINGS.PLOT_SAMPLING_S)
 
         self.debug = TextWidget(self.widgets, (LAYOUT.GAP * 2, LAYOUT.GAP * 2), " ", COLORS.LABEL, align="topleft")
 
@@ -107,43 +108,44 @@ class Framework:
                 mouse_pressed[3] = event.y * (1 + key_pressed[pygame.K_LCTRL] * 9)
 
         self.widgets.events(mouse_pos, mouse_pressed)
-
         self.system.events(mouse_pos, mouse_pressed)
         self.reference.events(mouse_pos, mouse_pressed)
 
-        self.actuator.delay = self.act_delay_tuner.value
+        self.actuator.delay = self.act_delay_tuner.value * Framework.MS_TO_S
         self.actuator.limit = self.act_lim_tuner.value
 
-        self.sensor.delay = self.sensor_delay_tuner.value
+        self.sensor.delay = self.sensor_delay_tuner.value * Framework.MS_TO_S
         self.sensor.amplitude = self.sensor_noise_tuner.value
 
-        self.controller.tune(self.kp_tuner.value, self.ki_tuner.value, self.kd_tuner.value, self.nd_tuner.value)
+        self.controller.kp = self.kp_tuner.value
+        self.controller.ki = self.ki_tuner.value
+        self.controller.kd = self.kd_tuner.value
+        self.controller.nd = self.nd_tuner.value
         self.controller.anti_windup = bool(self.aw_switch)
         self.controller.limit = self.limit_tuner.value
 
     def update(self):
 
-        now = pygame.time.get_ticks()
-        self.actuator.update(now)
-        self.sensor.update(now)
-
         if not self.paused:
+            self.now += self.dt
+
+            self.actuator.update(self.now)
+            self.sensor.update(self.now)
 
             self.sensor.request(self.system.pos)
+            self.controller.update(self.reference.pos, self.sensor.value, self.dt)
+            self.actuator.request(self.controller.output)
 
-            control_signal = self.controller.control(self.reference.pos, self.sensor.value, self.dt)
-
-            self.actuator.request(control_signal)
             self.system.apply_force(self.actuator.value)
             self.system.update(self.dt)
 
-            self.top_plotter.register("Reference", self.reference.pos, now)
-            self.top_plotter.register("Measurement", self.sensor.value, now)
-            self.bot_plotter.register("Control", self.actuator.value, now)
-            self.bot_plotter.register("Integrator", self.controller.i_term, now)
+            self.top_plotter.register("Reference", self.reference.pos, self.now)
+            self.top_plotter.register("Measurement", self.sensor.value, self.now)
+            self.bot_plotter.register("Control", self.actuator.value, self.now)
+            self.bot_plotter.register("Integrator", self.controller.i_term, self.now)
 
-            self.top_plotter.filter(now)
-            self.bot_plotter.filter(now)
+            self.top_plotter.filter(self.now)
+            self.bot_plotter.filter(self.now)
 
     def render(self):
         self.display.fill(COLORS.BACKGROUND)

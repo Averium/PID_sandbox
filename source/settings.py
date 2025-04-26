@@ -9,6 +9,9 @@ class SETTINGS:
     SCALE = 240  # pixels / meter
     HANDLE_HIGHLIGHT = 2
 
+    PLOT_TIME_BUFFER_S = 4.0
+    PLOT_SAMPLING_S = 0.01
+
 
 class COLORS:
 
