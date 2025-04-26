@@ -69,32 +69,37 @@ class Reference:
 
 class PID:
 
-    def __init__(self, kp, ki, kd):
-        self.kp = kp
-        self.ki = ki
-        self.kd = kd
+    def __init__(self, kp, ki, kd, nd=0):
+        self.kp = 0
+        self.ki = 0
+        self.kd = 0
+        self.nd = 0
 
-        self.zoh = 0
+        self.i_term = 0
+        self.d_term = 0
         self.last_error = 0
 
-    def tune(self, kp, ki, kd):
+        self.tune(kp, ki, kd, nd)
+
+    def tune(self, kp, ki, kd, nd):
         self.kp = kp
         self.ki = ki
         self.kd = kd
+        self.nd = 1.0 / (1.0 + nd)
 
     def control(self, reference, measurement, dt, integrator_ena):
         error = reference - measurement
 
-        self.zoh = self.zoh + error * dt * integrator_ena
+        self.i_term = self.i_term + error * dt * integrator_ena
+        self.d_term = self.d_term + self.nd * ((error - self.last_error) / dt - self.d_term)
+        self.last_error = error
 
         if self.ki == 0:
-            self.zoh = 0
+            self.i_term = 0
 
         control_p = error * self.kp
-        control_i = self.zoh * self.ki
-        control_d = (error - self.last_error) / dt * self.kd
-
-        self.last_error = error
+        control_i = self.i_term * self.ki
+        control_d = self.d_term * self.kd
 
         return control_p + control_i + control_d
 
@@ -146,4 +151,4 @@ class Sensor(Delay):
 
     @property
     def value(self):
-        return self._value + (random() * 2 - 1) * self.amplitude * 0.001
+        return self._value + (random() * 2 - 1) * self.amplitude

@@ -65,7 +65,7 @@ class Widget(pygame.Rect):
 
 class TextWidget(Widget):
 
-    SMALL_FONT = pygame.font.SysFont("monospace", 20, True)
+    SMALL_FONT = pygame.font.SysFont("monospace", 22, True)
     LARGE_FONT = pygame.font.SysFont("monospace", 32, True)
 
     def __init__(self, container, anchor, text, color, large=False, align="topleft"):
@@ -78,9 +78,9 @@ class TextWidget(Widget):
         self.text = text
         self.set_text(text)
 
-    def set_text(self, text):
-        self.text = text
-        width, height = self.font.size(text)
+    def set_text(self, new_text):
+        self.text = new_text
+        width, height = self.font.size(new_text)
         self.update(0, 0, width, height)
         setattr(self, self.align, self.anchor)
 
@@ -93,32 +93,82 @@ class TextWidget(Widget):
         return 2
 
 
-class Tuner(TextWidget):
+class TextPairWidget(TextWidget):
 
-    def __init__(self, container, anchor, text, color, value, step=0.1, limits=(-1, 1), align="topleft"):
+    def __init__(self, container, anchor, base_text, value_text, color, align="topleft", delimiter=": "):
+        self._base_text = base_text
+        self._value_text = value_text
+        self._delimiter = delimiter
+
+        super().__init__(container, anchor, self.full_text, color, align=align)
+
+    @property
+    def full_text(self):
+        return f"{self._base_text}{self._delimiter}{self._value_text}"
+
+    def set_value_text(self, new_text):
+        self._value_text = new_text
+        super().set_text(self.full_text)
+
+    def set_base_text(self, new_text):
+        self._base_text = new_text
+        super().set_text(self.full_text)
+
+    def render(self, display):
+        text_color = self.color[0]
+        value_color = self.color[1]
+
+        text_surface = self.font.render(self._base_text + self._delimiter, True, text_color[self.hovered])
+        value_surface = self.font.render(self._value_text, True, value_color[self.hovered])
+
+        display.blit(text_surface, (self.left, self.top))
+        display.blit(value_surface, (self.left + self.font.size(self._base_text + self._delimiter)[0], self.top))
+
+
+class Switch(TextPairWidget):
+
+    def __init__(self, container, anchor, text, color, state=False, align="topleft"):
+        self._state = state
+        super().__init__(container, anchor, text, self.state_text, color, align)
+
+    def __bool__(self):
+        return self._state
+
+    @property
+    def state_text(self):
+        return "On" if self._state else "Off"
+
+    def relay(self):
+        self._state = not self._state
+        self.set_value_text(self.state_text)
+
+    def events(self, mouse_pos, mouse_pressed):
+        super().events(mouse_pos, mouse_pressed)
+
+        if self.clicked:
+            self.relay()
+
+
+class Tuner(TextPairWidget):
+
+    def __init__(self, container, anchor, text, color, value, step=0.1, limits=(-1, 1), decimals=1, align="topleft"):
         self._value = 0
-        super().__init__(container, anchor, text, color, align=align)
+        super().__init__(container, anchor, text, "", color, align=align)
 
-        self._limits = limits
         self._step = step
-        self._base_text = text
+        self._limits = limits
+        self._decimals = decimals
+
         self.set_value(value)
 
     @property
     def value(self):
         return self._value
 
-    @property
-    def full_text(self):
-        return f"{self._base_text}: {self._value:.1f}"
-
     def set_value(self, new_value):
         self._value = min(max(new_value, self._limits[0]), self._limits[1])
-        super().set_text(self.full_text)
-
-    def set_text(self, text):
-        self._base_text = text
-        super().set_text(self.full_text)
+        self._value_text = f"{self.value:.{self._decimals}f}"
+        TextWidget.set_text(self, self.full_text)
 
     def events(self, mouse_pos, mouse_pressed):
         super().events(mouse_pos, mouse_pressed)
@@ -128,16 +178,6 @@ class Tuner(TextWidget):
                 self.set_value(self._value + self._step * mouse_pressed[3])
             if mouse_pressed[2]:
                 self.set_value(0)
-
-    def render(self, display):
-        text_color = self.color[0]
-        value_color = self.color[1]
-
-        text_surface = self.font.render(self._base_text, True, text_color[self.hovered])
-        value_surface = self.font.render(f"{self._value:.1f}", True, value_color[self.hovered])
-
-        display.blit(text_surface, (self.left, self.top))
-        display.blit(value_surface, (self.left + self.font.size(self._base_text + " ")[0], self.top))
 
 
 class TimeSeries:
@@ -160,16 +200,16 @@ class TimeSeries:
         self.data = self.data[mask]
 
     def scale(self, x_length, x_shift, y_length, y_shift, limits):
+
         x_scale = x_length / (self.time[-1] - self.time[0])
         times = (self.time - self.time[0]) * x_scale + x_shift
 
-        if limits is None:
-            min_data, max_data = numpy.min(self.data), numpy.max(self.data)
-            y_scale = y_length / (max_data - min_data)
-            data = y_shift - (self.data - min_data) * y_scale
+        if limits[0] == limits[1]:
+            y_scale = 0
         else:
             y_scale = y_length / (limits[1] - limits[0])
-            data = y_shift - (self.data - limits[0]) * y_scale
+
+        data = y_shift - (self.data - limits[0]) * y_scale
 
         return numpy.column_stack((times, data))
 
@@ -181,11 +221,10 @@ class Plotter(Widget):
         self.time_window = time_window
         self.min_period = min_period
 
-        self.border = pygame.Rect(self.left + 20, self.top + 20, self.width - 40, self.height - 40)
+        self.border = self.inflate(-LAYOUT.GAP, -LAYOUT.GAP)
         self.scaling = self.border.width, self.border.left, self.border.height, self.border.bottom
 
         self.limits = limits
-
         self.signals = {signal: TimeSeries(signal) for signal in signals}
 
     def filter(self, now):
@@ -198,10 +237,19 @@ class Plotter(Widget):
             self.signals[key].append(value, now)
 
     def render(self, display):
+
+        if self.limits is None:
+            high = numpy.min(numpy.min([series.data for series in self.signals.values()]))
+            low = numpy.max(numpy.max([series.data for series in self.signals.values()]))
+            limits = high, low
+        else:
+            limits = self.limits
+
         pygame.draw.rect(display, self.color[0], self)
-        pygame.draw.rect(display, self.color[1], self.border, 1)
+        pygame.draw.lines(display, self.color[1], False, (self.border.topleft, self.border.bottomleft, self.border.bottomright), 1)
+
 
         for index, (name, signal) in enumerate(self.signals.items()):
             if len(signal.data) > 2:
-                points = signal.scale(*self.scaling, self.limits)
-                pygame.draw.lines(display, self.color[index + 2], False, tuple(map(tuple, points)))
+                points = signal.scale(*self.scaling, limits)
+                pygame.draw.aalines(display, self.color[index + 2], False, tuple(map(tuple, points)))

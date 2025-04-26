@@ -6,7 +6,7 @@ from pygame.math import Vector2 as Vector
 from source.control import Reference, PID, Delay, Actuator, Sensor
 from source.settings import SETTINGS, COLORS, SYSTEM, LAYOUT
 from source.system import System
-from source.widgets import Tuner, WidgetContainer, Widget, TextWidget, Plotter
+from source.widgets import Tuner, WidgetContainer, Widget, TextWidget, Plotter, Switch
 
 
 class Framework:
@@ -37,20 +37,28 @@ class Framework:
         Widget(self.widgets, LAYOUT.RIGHT_FIELD, COLORS.FIELD)
         Widget(self.widgets, LAYOUT.BOTTOM_FIELD, COLORS.FIELD)
 
-        TextWidget(self.widgets, LAYOUT.CONTROLLER_TEXT, "Controller", COLORS.LABEL, align="topleft")
-        self.kp_tuner = Tuner(self.widgets, LAYOUT.KP_TUNER, "P gain", COLORS.TUNER, 0, limits=[0, 100], align="bottomleft")
-        self.ki_tuner = Tuner(self.widgets, LAYOUT.KI_TUNER, "I gain", COLORS.TUNER, 0, limits=[0, 100], align="bottomleft")
-        self.kd_tuner = Tuner(self.widgets, LAYOUT.KD_TUNER, "D gain", COLORS.TUNER, 0, limits=[0, 100], align="bottomleft")
+        delay_setting = dict(limits=[0, 1000], step=10, decimals=0, align="bottomleft")
+        limit_setting = dict(limits=[0, 100], step=1, decimals=0, align="bottomleft")
+        tuner_setting = dict(limits=[0, 100], step=0.1, decimals=1, align="bottomleft")
+        noise_setting = dict(limits=[0, 1.0], step=0.001, decimals=3, align="bottomleft")
+
+        TextWidget(self.widgets, LAYOUT.CONTROLLER_TEXT, "Controller", COLORS.LABEL)
+        self.kp_tuner = Tuner(self.widgets, LAYOUT.KP_TUNER, "P gain", COLORS.TUNER, 0, **tuner_setting)
+        self.ki_tuner = Tuner(self.widgets, LAYOUT.KI_TUNER, "I gain", COLORS.TUNER, 0, **tuner_setting)
+        self.kd_tuner = Tuner(self.widgets, LAYOUT.KD_TUNER, "D gain", COLORS.TUNER, 0, **tuner_setting)
+        self.aw_switch = Switch(self.widgets, LAYOUT.AW_SWITCH, "Anit-windup", COLORS.TUNER, False, align="bottomleft")
+        self.nd_tuner = Tuner(self.widgets, LAYOUT.ND_TUNER, "ND filter", COLORS.TUNER, 0, **tuner_setting)
 
         TextWidget(self.widgets, LAYOUT.ACTUATOR_TEXT, "Actuator", COLORS.LABEL, align="topleft")
-        self.act_delay_tuner = Tuner(self.widgets, LAYOUT.ACT_DELAY, "delay [ms]", COLORS.SETTING, 0, limits=[0, 100], step=10, align="bottomleft")
-        self.act_lim_tuner = Tuner(self.widgets, LAYOUT.ACT_LIMIT,   "limit [N] ", COLORS.SETTING, 0, limits=[0, 100], step=1, align="bottomleft")
+        self.act_delay_tuner = Tuner(self.widgets, LAYOUT.ACT_DELAY, "Delay [ms]", COLORS.SETTING, 0, **delay_setting)
+        self.act_lim_tuner = Tuner(self.widgets, LAYOUT.ACT_LIMIT,   "Limit  [N]", COLORS.SETTING, 0, **limit_setting)
 
         TextWidget(self.widgets, LAYOUT.SENSOR_TEXT, "Sensor", COLORS.LABEL, align="topleft")
-        self.sensor_delay_tuner = Tuner(self.widgets, LAYOUT.SENSOR_DELAY, "delay [ms]", COLORS.SETTING, 0, limits=[0, 100], step=10, align="bottomleft")
-        self.sensor_amplitude_tuner = Tuner(self.widgets, LAYOUT.SENSOR_NOISE,   "Noise [mm]", COLORS.SETTING, 0, limits=[0, 100], step=1, align="bottomleft")
+        self.sensor_delay_tuner = Tuner(self.widgets, LAYOUT.SENSOR_DELAY, "Delay [ms]", COLORS.SETTING, 0, **delay_setting)
+        self.sensor_noise_tuner = Tuner(self.widgets, LAYOUT.SENSOR_NOISE, "Noise  [m]", COLORS.SETTING, 0, **noise_setting)
 
-        self.top_plotter = Plotter(self.widgets, LAYOUT.TOP_PLOT, COLORS.PLOTTER, ("Reference", "Measurement"), 5000, 0, limits=(-SYSTEM.RAIL_LENGTH/2, SYSTEM.RAIL_LENGTH/2))
+        self.top_plotter = Plotter(self.widgets, LAYOUT.TOP_PLOT, COLORS.TOP_PLOTTER, ("Reference", "Measurement"), 4000, 10, limits=(-SYSTEM.RAIL_LENGTH/2, SYSTEM.RAIL_LENGTH/2))
+        self.bot_plotter = Plotter(self.widgets, LAYOUT.BOT_PLOT, COLORS.BOT_PLOTTER, ("Control", "Integrator"), 4000, 10)
 
         self.debug = TextWidget(self.widgets, (LAYOUT.GAP * 2, LAYOUT.GAP * 2), " ", COLORS.LABEL, align="topleft")
 
@@ -105,9 +113,9 @@ class Framework:
         self.actuator.limit = self.act_lim_tuner.value
 
         self.sensor.delay = self.sensor_delay_tuner.value
-        self.sensor.amplitude = self.sensor_amplitude_tuner.value
+        self.sensor.amplitude = self.sensor_noise_tuner.value
 
-        self.controller.tune(self.kp_tuner.value, self.ki_tuner.value, self.kd_tuner.value)
+        self.controller.tune(self.kp_tuner.value, self.ki_tuner.value, self.kd_tuner.value, self.nd_tuner.value)
 
     def update(self):
 
@@ -119,7 +127,7 @@ class Framework:
 
             self.sensor.request(self.system.pos)
 
-            integrator_ena = not self.actuator.saturated()
+            integrator_ena = not bool(self.aw_switch) or not self.actuator.saturated()
             control_signal = self.controller.control(self.reference.pos, self.sensor.value, self.dt, integrator_ena)
 
             self.actuator.request(control_signal)
@@ -128,7 +136,11 @@ class Framework:
 
             self.top_plotter.register("Reference", self.reference.pos, now)
             self.top_plotter.register("Measurement", self.sensor.value, now)
+            self.bot_plotter.register("Control", self.actuator.value, now)
+            self.bot_plotter.register("Integrator", self.controller.i_term, now)
+
             self.top_plotter.filter(now)
+            self.bot_plotter.filter(now)
 
     def render(self):
         self.display.fill(COLORS.BACKGROUND)

@@ -18,8 +18,6 @@ if __name__ == "__main__":
 
 
 # TODO:
-#  pretty tune widget
-#  delay element
-#  noise element
-#  plot widget
-#  fullscreen, system window, plot window, settings board
+#  plot widget text and ticks
+#  switch widget
+#  anti-windup and derivative filter switches
