@@ -3,10 +3,11 @@ from typing import Optional
 import pygame
 from pygame.math import Vector2 as Vector
 
-from source.control import Reference, PID, Delay, Actuator, Sensor
+from source.control import Reference, PID, Actuator, Sensor
 from source.settings import SETTINGS, COLORS, SYSTEM, LAYOUT
 from source.system import System
-from source.widgets import Tuner, WidgetContainer, Widget, TextWidget, Plotter, Switch
+from source.widgets import Tuner, WidgetContainer, Widget, TextWidget, Switch
+from source.plot import Plotter
 
 
 class Framework:
@@ -46,6 +47,7 @@ class Framework:
         self.kp_tuner = Tuner(self.widgets, LAYOUT.KP_TUNER, "P gain", COLORS.TUNER, 0, **tuner_setting)
         self.ki_tuner = Tuner(self.widgets, LAYOUT.KI_TUNER, "I gain", COLORS.TUNER, 0, **tuner_setting)
         self.kd_tuner = Tuner(self.widgets, LAYOUT.KD_TUNER, "D gain", COLORS.TUNER, 0, **tuner_setting)
+        self.limit_tuner = Tuner(self.widgets, LAYOUT.LIMIT_TUNER, "Saturation [N]", COLORS.TUNER, 0, **limit_setting)
         self.aw_switch = Switch(self.widgets, LAYOUT.AW_SWITCH, "Anit-windup", COLORS.TUNER, False, align="bottomleft")
         self.nd_tuner = Tuner(self.widgets, LAYOUT.ND_TUNER, "ND filter", COLORS.TUNER, 0, **tuner_setting)
 
@@ -116,6 +118,8 @@ class Framework:
         self.sensor.amplitude = self.sensor_noise_tuner.value
 
         self.controller.tune(self.kp_tuner.value, self.ki_tuner.value, self.kd_tuner.value, self.nd_tuner.value)
+        self.controller.anti_windup = bool(self.aw_switch)
+        self.controller.limit = self.limit_tuner.value
 
     def update(self):
 
@@ -127,8 +131,7 @@ class Framework:
 
             self.sensor.request(self.system.pos)
 
-            integrator_ena = not bool(self.aw_switch) or not self.actuator.saturated()
-            control_signal = self.controller.control(self.reference.pos, self.sensor.value, self.dt, integrator_ena)
+            control_signal = self.controller.control(self.reference.pos, self.sensor.value, self.dt)
 
             self.actuator.request(control_signal)
             self.system.apply_force(self.actuator.value)

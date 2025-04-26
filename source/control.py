@@ -69,7 +69,7 @@ class Reference:
 
 class PID:
 
-    def __init__(self, kp, ki, kd, nd=0):
+    def __init__(self, kp, ki, kd, nd=0, limit=0):
         self.kp = 0
         self.ki = 0
         self.kd = 0
@@ -78,6 +78,10 @@ class PID:
         self.i_term = 0
         self.d_term = 0
         self.last_error = 0
+        self.output = 0
+
+        self.anti_windup = False
+        self.limit = limit
 
         self.tune(kp, ki, kd, nd)
 
@@ -87,22 +91,27 @@ class PID:
         self.kd = kd
         self.nd = 1.0 / (1.0 + nd)
 
-    def control(self, reference, measurement, dt, integrator_ena):
+    def control(self, reference, measurement, dt):
         error = reference - measurement
 
-        self.i_term = self.i_term + error * dt * integrator_ena
-        self.d_term = self.d_term + self.nd * ((error - self.last_error) / dt - self.d_term)
-        self.last_error = error
-
+        if abs(self.output) != self.limit or not self.anti_windup:
+            self.i_term = self.i_term + error * dt
         if self.ki == 0:
             self.i_term = 0
+
+        self.d_term = self.d_term + self.nd * ((error - self.last_error) / dt - self.d_term)
+        self.last_error = error
 
         control_p = error * self.kp
         control_i = self.i_term * self.ki
         control_d = self.d_term * self.kd
 
-        return control_p + control_i + control_d
+        if self.limit > 0:
+            self.output = min(max(control_p + control_i + control_d, -self.limit), self.limit)
+        else:
+            self.output = control_p + control_i + control_d
 
+        return self.output
 
 class Delay:
 
@@ -140,8 +149,6 @@ class Actuator(Delay):
     def value(self):
         return min(max(self._value, -self.limit), self.limit) if self.limit > 0 else self._value
 
-    def saturated(self):
-        return abs(self.value) == self.limit
 
 class Sensor(Delay):
 
