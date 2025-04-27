@@ -49,16 +49,17 @@ class Framework:
         self.ki_tuner = Tuner(self.widgets, LAYOUT.KI_TUNER, "I gain", COLORS.TUNER, 0, **tuner_setting)
         self.kd_tuner = Tuner(self.widgets, LAYOUT.KD_TUNER, "D gain", COLORS.TUNER, 0, **tuner_setting)
         self.limit_tuner = Tuner(self.widgets, LAYOUT.LIMIT_TUNER, "Saturation [N]", COLORS.TUNER, 0, **limit_setting)
-        self.aw_switch = Switch(self.widgets, LAYOUT.AW_SWITCH, "Anit-windup", COLORS.TUNER, False, align="bottomleft")
-        self.nd_tuner = Tuner(self.widgets, LAYOUT.ND_TUNER, "ND filter", COLORS.TUNER, 0, **tuner_setting)
+        self.aw_switch = Switch(self.widgets, LAYOUT.AW_SWITCH, "Anit-windup   ", COLORS.TUNER, False, align="bottomleft")
+        self.nd_tuner = Tuner(self.widgets, LAYOUT.ND_TUNER, "ND filter     ", COLORS.TUNER, 0, **tuner_setting)
 
         TextWidget(self.widgets, LAYOUT.ACTUATOR_TEXT, "Actuator", COLORS.LABEL, align="topleft")
-        self.act_delay_tuner = Tuner(self.widgets, LAYOUT.ACT_DELAY, "Delay [ms]", COLORS.SETTING, 0, **delay_setting)
-        self.act_lim_tuner = Tuner(self.widgets, LAYOUT.ACT_LIMIT,   "Limit  [N]", COLORS.SETTING, 0, **limit_setting)
+        self.act_delay_tuner = Tuner(self.widgets, LAYOUT.ACTUATOR_DELAY, "Delay [ms]", COLORS.SETTING, 0, **delay_setting)
+        self.act_lim_tuner = Tuner(self.widgets, LAYOUT.ACTUATOR_LIMIT,   "Limit  [N]", COLORS.SETTING, 0, **limit_setting)
 
         TextWidget(self.widgets, LAYOUT.SENSOR_TEXT, "Sensor", COLORS.LABEL, align="topleft")
         self.sensor_delay_tuner = Tuner(self.widgets, LAYOUT.SENSOR_DELAY, "Delay [ms]", COLORS.SETTING, 0, **delay_setting)
         self.sensor_noise_tuner = Tuner(self.widgets, LAYOUT.SENSOR_NOISE, "Noise  [m]", COLORS.SETTING, 0, **noise_setting)
+        self.sensor_filter_tuner = Tuner(self.widgets, LAYOUT.SENSOR_FILTER, "Filter    ", COLORS.TUNER, 1, **noise_setting)
 
         self.top_plotter = Plotter(self.widgets, LAYOUT.TOP_PLOT, COLORS.TOP_PLOTTER, ("Reference", "Measurement"), SETTINGS.PLOT_TIME_BUFFER_S, SETTINGS.PLOT_SAMPLING_S, limits=(-SYSTEM.RAIL_LENGTH/2, SYSTEM.RAIL_LENGTH/2))
         self.bot_plotter = Plotter(self.widgets, LAYOUT.BOT_PLOT, COLORS.BOT_PLOTTER, ("Control", "Integrator"), SETTINGS.PLOT_TIME_BUFFER_S, SETTINGS.PLOT_SAMPLING_S)
@@ -115,7 +116,8 @@ class Framework:
         self.actuator.limit = self.act_lim_tuner.value
 
         self.sensor.delay = self.sensor_delay_tuner.value * Framework.MS_TO_S
-        self.sensor.amplitude = self.sensor_noise_tuner.value
+        self.sensor.noise_amplitude = self.sensor_noise_tuner.value
+        self.sensor.noise_filter = self.sensor_filter_tuner.value
 
         self.controller.kp = self.kp_tuner.value
         self.controller.ki = self.ki_tuner.value

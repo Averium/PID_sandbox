@@ -95,7 +95,7 @@ class Plotter(Widget):
         for index, signal in enumerate(self.signals.values()):
             if len(signal.data) > 2:
                 points = signal.scale(*self.scaling, self.limits)
-                pygame.draw.lines(display, self.color[3][index], False, tuple(map(tuple, points)))
+                pygame.draw.lines(display, self.color[3][index], False, tuple(map(tuple, points)), 2)
 
                 label_surface = self.font.render(f"{signal.data[-1]:.3f}", True, self.color[3][index])
                 label_rect = label_surface.get_rect()

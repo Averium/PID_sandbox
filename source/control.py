@@ -142,10 +142,15 @@ class Actuator(Delay):
 
 class Sensor(Delay):
 
-    def __init__(self, delay=0, amplitude=0):
+    def __init__(self, delay=0, noise_amplitude=0, noise_filter=1):
         super().__init__(delay)
-        self.amplitude = amplitude
+        self.noise_amplitude = noise_amplitude
+        self.noise_filter = noise_filter
 
-    @property
-    def value(self):
-        return self._value + (random() * 2 - 1) * self.amplitude
+    def update(self, time):
+        temp = self._value
+        super().update(time)
+
+        noisy_value = self._value + (random() * 2 - 1) * self.noise_amplitude
+        if self.noise_filter > 0:
+            self._value = noisy_value * self.noise_filter + temp * (1.0 - self.noise_filter)

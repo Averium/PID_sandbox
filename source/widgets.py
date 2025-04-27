@@ -146,15 +146,16 @@ class Switch(TextPairWidget):
 
 class Tuner(TextPairWidget):
 
-    def __init__(self, container, anchor, text, color, value, step=0.1, limits=(-1, 1), decimals=1, align="topleft"):
+    def __init__(self, container, anchor, text, color, base_value, step=0.1, limits=(-1, 1), decimals=1, align="topleft"):
         self._value = 0
         super().__init__(container, anchor, text, "", color, align=align)
 
         self._step = step
         self._limits = limits
         self._decimals = decimals
+        self._base_value = base_value
 
-        self.set_value(value)
+        self.set_value(base_value)
 
     @property
     def value(self):
@@ -172,4 +173,4 @@ class Tuner(TextPairWidget):
             if mouse_pressed[3]:
                 self.set_value(self._value + self._step * mouse_pressed[3])
             if mouse_pressed[2]:
-                self.set_value(0)
+                self.set_value(self._base_value)
