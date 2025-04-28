@@ -43,6 +43,7 @@ class Framework:
         limit_setting = dict(limits=[0, 100], step=1, decimals=0, align="bottomleft")
         tuner_setting = dict(limits=[0, 100], step=0.1, decimals=1, align="bottomleft")
         noise_setting = dict(limits=[0, 1.0], step=0.001, decimals=3, align="bottomleft")
+        filter_setting = dict(limits=[0.1, 100], step=0.1, decimals=1, align="bottomleft")
 
         TextWidget(self.widgets, LAYOUT.CONTROLLER_TEXT, "Controller", COLORS.LABEL)
         self.kp_tuner = Tuner(self.widgets, LAYOUT.KP_TUNER, "P gain", COLORS.TUNER, 0, **tuner_setting)
@@ -50,7 +51,7 @@ class Framework:
         self.kd_tuner = Tuner(self.widgets, LAYOUT.KD_TUNER, "D gain", COLORS.TUNER, 0, **tuner_setting)
         self.limit_tuner = Tuner(self.widgets, LAYOUT.LIMIT_TUNER, "Saturation [N]", COLORS.TUNER, 0, **limit_setting)
         self.aw_switch = Switch(self.widgets, LAYOUT.AW_SWITCH, "Anit-windup   ", COLORS.TUNER, False, align="bottomleft")
-        self.nd_tuner = Tuner(self.widgets, LAYOUT.ND_TUNER, "ND filter     ", COLORS.TUNER, 0, **tuner_setting)
+        self.nd_tuner = Tuner(self.widgets, LAYOUT.ND_TUNER, "ND filter     ", COLORS.TUNER, 1000, **filter_setting)
 
         TextWidget(self.widgets, LAYOUT.ACTUATOR_TEXT, "Actuator", COLORS.LABEL, align="topleft")
         self.act_delay_tuner = Tuner(self.widgets, LAYOUT.ACTUATOR_DELAY, "Delay [ms]", COLORS.SETTING, 0, **delay_setting)
@@ -62,7 +63,7 @@ class Framework:
         self.sensor_filter_tuner = Tuner(self.widgets, LAYOUT.SENSOR_FILTER, "Filter    ", COLORS.TUNER, 1, **noise_setting)
 
         self.top_plotter = Plotter(self.widgets, LAYOUT.TOP_PLOT, COLORS.TOP_PLOTTER, ("Reference", "Measurement"), SETTINGS.PLOT_TIME_BUFFER_S, SETTINGS.PLOT_SAMPLING_S, limits=(-SYSTEM.RAIL_LENGTH/2, SYSTEM.RAIL_LENGTH/2))
-        self.bot_plotter = Plotter(self.widgets, LAYOUT.BOT_PLOT, COLORS.BOT_PLOTTER, ("Control", "Integrator"), SETTINGS.PLOT_TIME_BUFFER_S, SETTINGS.PLOT_SAMPLING_S)
+        self.bot_plotter = Plotter(self.widgets, LAYOUT.BOT_PLOT, COLORS.BOT_PLOTTER, ("Error", "Control", "Integrator"), SETTINGS.PLOT_TIME_BUFFER_S, SETTINGS.PLOT_SAMPLING_S)
 
         self.debug = TextWidget(self.widgets, (LAYOUT.GAP * 2, LAYOUT.GAP * 2), " ", COLORS.LABEL, align="topleft")
 
@@ -87,9 +88,6 @@ class Framework:
         mouse_pressed = [*pygame.mouse.get_pressed(num_buttons=3), 0]
         mouse_pos = Vector(pygame.mouse.get_pos())
 
-        if key_pressed[pygame.K_ESCAPE]:
-            self.running = False
-
         if key_pressed[pygame.K_a] or key_pressed[pygame.K_LEFT]:
             self.reference.move(-3, self.dt)
         if key_pressed[pygame.K_d] or key_pressed[pygame.K_RIGHT]:
@@ -99,6 +97,8 @@ class Framework:
             if event.type == pygame.QUIT:
                 self.running = False
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE and not self.widgets.typing:
+                    self.running = False
                 if event.key == pygame.K_p:
                     self.paused = not self.paused
                 if event.key == pygame.K_r:
@@ -108,7 +108,7 @@ class Framework:
             if event.type == pygame.MOUSEWHEEL:
                 mouse_pressed[3] = event.y * (1 + key_pressed[pygame.K_LCTRL] * 9)
 
-        self.widgets.events(mouse_pos, mouse_pressed)
+        self.widgets.events(mouse_pos, mouse_pressed, event_list)
         self.system.events(mouse_pos, mouse_pressed)
         self.reference.events(mouse_pos, mouse_pressed)
 
@@ -143,6 +143,7 @@ class Framework:
 
             self.top_plotter.register("Reference", self.reference.pos, self.now)
             self.top_plotter.register("Measurement", self.sensor.value, self.now)
+            self.bot_plotter.register("Error", self.controller.error, self.now)
             self.bot_plotter.register("Control", self.actuator.value, self.now)
             self.bot_plotter.register("Integrator", self.controller.i_term, self.now)
 

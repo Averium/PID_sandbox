@@ -1,4 +1,5 @@
 from collections import deque
+from math import pi
 from random import random
 
 import pygame
@@ -77,24 +78,38 @@ class PID:
 
         self.i_term = 0
         self.d_term = 0
+
+        self.error = 0
         self.last_error = 0
+
         self.output = 0
 
         self.anti_windup = False
         self.limit = limit
 
-    def update(self, reference, measurement, dt):
-        error = reference - measurement
+    def update_integral(self, dt):
+        saturated = (self.output == -self.limit and self.error < 0) or (self.output == self.limit and self.error > 0)
 
-        if abs(self.output) != self.limit or not self.anti_windup:
-            self.i_term = self.i_term + error * dt
+        if not (self.anti_windup and saturated):
+            self.i_term = self.i_term + self.error * dt
+
         if self.ki == 0:
             self.i_term = 0
 
-        self.d_term = self.d_term + (1.0 / (1.0 + self.nd)) * ((error - self.last_error) / dt - self.d_term)
-        self.last_error = error
+    def update_derivative(self, dt):
+        rc = 1 / (2 * pi * self.nd)
+        alpha = dt / (rc + dt)
 
-        control_p = error * self.kp
+        self.d_term = self.d_term + alpha * ((self.error - self.last_error) / dt - self.d_term)
+        self.last_error = self.error
+
+    def update(self, reference, measurement, dt):
+        self.error = reference - measurement
+
+        self.update_integral(dt)
+        self.update_derivative(dt)
+
+        control_p = self.error * self.kp
         control_i = self.i_term * self.ki
         control_d = self.d_term * self.kd
 

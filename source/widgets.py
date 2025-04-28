@@ -14,9 +14,17 @@ class WidgetContainer(list):
             self.append(widget)
             self.sort(key=lambda w: w.layer)
 
-    def events(self, mouse_pos, mouse_pressed):
+    def events(self, *args, **kwargs):
         for widget in self:
-            widget.events(mouse_pos, mouse_pressed)
+            widget.events(*args, **kwargs)
+
+    @property
+    def typing(self):
+        for widget in self:
+            if isinstance(widget, Tuner) and widget.typing:
+                return True
+        else:
+            return False
 
     def render(self, display):
         for widget in self:
@@ -46,7 +54,7 @@ class Widget(pygame.Rect):
     def layer(self):
         return 1
 
-    def events(self, mouse_pos, mouse_pressed):
+    def events(self, mouse_pos, mouse_pressed, key_pressed):
         self.hovered = self.collidepoint(mouse_pos)
         self.clicked = self.hovered and (mouse_pressed[0] and not self.last_pressed[0])
 
@@ -137,8 +145,8 @@ class Switch(TextPairWidget):
         self._state = not self._state
         self.set_value_text(self.state_text)
 
-    def events(self, mouse_pos, mouse_pressed):
-        super().events(mouse_pos, mouse_pressed)
+    def events(self, *args, **kwargs):
+        super().events(*args, **kwargs)
 
         if self.clicked:
             self.relay()
@@ -148,6 +156,8 @@ class Tuner(TextPairWidget):
 
     def __init__(self, container, anchor, text, color, base_value, step=0.1, limits=(-1, 1), decimals=1, align="topleft"):
         self._value = 0
+        self.typing = False
+
         super().__init__(container, anchor, text, "", color, align=align)
 
         self._step = step
@@ -155,22 +165,57 @@ class Tuner(TextPairWidget):
         self._decimals = decimals
         self._base_value = base_value
 
+        self._typed_text = ""
+        self._fixed_text = ""
+
         self.set_value(base_value)
 
     @property
     def value(self):
         return self._value
 
+    @property
+    def _value_text(self):
+        return self._typed_text if self.typing else self._fixed_text
+
+    @_value_text.setter
+    def _value_text(self, new_text):
+        self._fixed_text = new_text
+
     def set_value(self, new_value):
         self._value = min(max(new_value, self._limits[0]), self._limits[1])
-        self._value_text = f"{self.value:.{self._decimals}f}"
+        self._fixed_text = f"{self.value:.{self._decimals}f}"
         TextWidget.set_text(self, self.full_text)
 
-    def events(self, mouse_pos, mouse_pressed):
-        super().events(mouse_pos, mouse_pressed)
+    def activate_typing(self):
+        self.typing = True
+        self._typed_text = ""
+
+    def deactivate_typing(self, rollback=False):
+        self.typing = False
+        if not rollback and self._typed_text.isnumeric():
+            self.set_value(float(self._typed_text))
+
+    def events(self, mouse_pos, mouse_pressed, event_list):
+        super().events(mouse_pos, mouse_pressed, event_list)
 
         if self.hovered:
             if mouse_pressed[3]:
                 self.set_value(self._value + self._step * mouse_pressed[3])
             if mouse_pressed[2]:
                 self.set_value(self._base_value)
+
+        if self.typing:
+            for event in event_list:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        self.deactivate_typing()
+                    elif event.key == pygame.K_ESCAPE:
+                        self.deactivate_typing(True)
+                    else:
+                        self._typed_text += pygame.key.name(event.key)
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    self.deactivate_typing(True)
+
+        if self.clicked:
+            self.activate_typing()

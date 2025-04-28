@@ -57,7 +57,28 @@ class Plotter(Widget):
         self.limits = limits
         self.floating = limits is None
 
+        self.plot_switches = [True for _ in signals]
+        self.mouse_pos = Vector(0, 0)
+        self.mouse_pressed = pygame.mouse.get_pressed()
+
         self.signals = {signal: TimeSeries(signal) for signal in signals}
+
+        _, gap = self.font.size("X")
+        self.indicators = [
+            pygame.Rect(self.border.left + Plotter.GAP * 1.5, self.border.top + (gap + Plotter.GAP) * index, gap, gap)
+            for index, name in enumerate(self.signals)
+        ]
+
+    def events(self, mouse_pos, mouse_pressed, key_pressed):
+        super().events(mouse_pos, mouse_pressed, key_pressed)
+
+        if mouse_pressed[0] and not self.mouse_pressed[0]:
+            for index, indicator_rect in enumerate(self.indicators):
+                if indicator_rect.collidepoint(mouse_pos):
+                    self.plot_switches[index] = not self.plot_switches[index]
+
+        self.mouse_pos = mouse_pos
+        self.mouse_pressed = mouse_pressed
 
     def filter(self, now):
         for data in self.signals.values():
@@ -69,9 +90,13 @@ class Plotter(Widget):
             self.signals[key].append(value, now)
 
     def update_limits(self):
-        high = numpy.min(numpy.min([series.data for series in self.signals.values()]))
-        low = numpy.max(numpy.max([series.data for series in self.signals.values()]))
-        self.limits = high, low
+        if any(self.plot_switches):
+            data = [series.data for index, series in enumerate(self.signals.values()) if self.plot_switches[index]]
+            low = float(numpy.min(numpy.min(data)))
+            high = float(numpy.max(numpy.max(data)))
+            self.limits = min(low, 0), max(high, 0)
+        else:
+            self.limits = -1, 1
 
     def draw_axes(self, display):
 
@@ -91,29 +116,53 @@ class Plotter(Widget):
         pygame.draw.polygon(display, self.color[1], tuple(point + self.border.topleft for point in Plotter.ARROW_UP))
 
     def draw_data(self, display):
+        for signal_index, signal in enumerate(self.signals.values()):
 
-        for index, signal in enumerate(self.signals.values()):
-            if len(signal.data) > 2:
-                points = signal.scale(*self.scaling, self.limits)
-                pygame.draw.lines(display, self.color[3][index], False, tuple(map(tuple, points)), 2)
+            if len(signal.data) < 3 or not self.plot_switches[signal_index]:
+                continue
 
-                label_surface = self.font.render(f"{signal.data[-1]:.3f}", True, self.color[3][index])
-                label_rect = label_surface.get_rect()
-                label_rect.bottomright = points[-1]
+            points = signal.scale(*self.scaling, self.limits)
+            pygame.draw.lines(display, self.color[4][signal_index], False, tuple(map(tuple, points)), 2)
 
-                display.blit(label_surface, label_rect)
+            label_surface = self.font.render(f"{signal.data[-1]:.3f}", True, self.color[4][signal_index])
+            label_rect = label_surface.get_rect()
+            label_rect.bottomright = points[-1]
+
+            display.blit(label_surface, label_rect)
+
+            if not self.hovered:
+                continue
+
+            min_distance = self.width * 2
+            closest_index = None
+
+            for point_index, point in enumerate(points):
+                distance = self.mouse_pos.distance_to(point)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_index = point_index
+
+            if min_distance > 20:
+                continue
+
+            data_surface = self.font.render(f"y = {signal.data[closest_index]:.3f}", True, self.color[2])
+            data_rect = data_surface.get_rect()
+            data_rect.bottomleft = self.mouse_pos
+
+            display.blit(data_surface, data_rect)
+
 
     def draw_legend(self, display):
         for index, name in enumerate(self.signals):
             text_surface = self.font.render(name, True, self.color[2])
             text_rect = text_surface.get_rect()
 
-            position = self.border.left + Plotter.GAP * 1.5, self.border.top + (text_rect.height + Plotter.GAP) * index
-            indicator_rect = pygame.Rect(*position, text_rect.height, text_rect.height)
+            indicator_rect = self.indicators[index]
 
-            text_rect.topleft = position[0] + indicator_rect.width + Plotter.GAP, position[1]
+            text_rect.top = indicator_rect.top
+            text_rect.left = indicator_rect.left + indicator_rect.width + Plotter.GAP
 
-            pygame.draw.rect(display, self.color[3][index], indicator_rect)
+            pygame.draw.rect(display, self.color[4][index], indicator_rect, 0 if self.plot_switches[index] else 1)
             display.blit(text_surface, text_rect)
 
     def render(self, display):
