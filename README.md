@@ -18,7 +18,7 @@ This sandbox provides a dynamic environment where you can tune PID parameters in
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/yourusername/pid-sandbox.git
+git clone https://github.com/Averium/pid-sandbox.git
 cd pid-sandbox
 ```
 
